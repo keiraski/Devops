@@ -1,0 +1,76 @@
+stages:
+  - build
+  - style
+  - integration_tests
+  - deploy
+
+build-code:
+  stage: build
+  tags:
+    - build
+  script:
+    - cd src/cat/ && make
+    - cd ../grep/ && make
+
+  artifacts:
+    paths:
+      - src/cat/s21_cat
+      - src/grep/s21_grep
+    expire_in: 30 days
+  after_script:
+    - sh notify.sh "build"
+
+style-check-cat:
+  stage: style
+  tags:
+    - style
+  script:
+    - cd src/cat
+    - if clang-format -n -style=Google *.c; then echo "Code style cat is OK"; else echo "Code style check failed" && exit 1; fi
+  artifacts:
+    paths:
+      - src/cat/*.c
+    expire_in: 30 days
+  after_script:
+    - sh notify.sh "style-check-cat"
+
+style-check-grep:
+  stage: style
+  tags:
+    - style
+  script:
+    - cd src/grep
+    - if clang-format -n -style=Google *.c; then echo "Code style grep is OK"; else echo "Code style check failed" && exit 1; fi
+  artifacts:
+    paths:
+      - src/grep/*.c
+    expire_in: 30 days
+  after_script:
+    - sh notify.sh "style-check-grep"
+
+integration-tests:
+  stage: integration_tests
+  tags:
+    - test
+  script:
+    - cd src/cat
+    - bash test_s21_cat.sh; status=$?; [[ $status == 0 ]] && echo "Integration tests cat is OK" || (echo "Integration tests cat failed" && exit 1)
+    - cd ../grep
+    - bash grep_test.sh; status=$?; [[ $status == 0 ]] && echo "Integration tests grep is OK" || (echo "Integration tests grep failed" && exit 1)
+  dependencies:
+    - build-code
+    - style-check-cat
+    - style-check-grep
+  after_script:
+    - sh notify.sh "integration-tests"
+
+Deploy:
+  stage: deploy
+  tags:
+    - deploy
+  when: manual
+  script:
+    - chmod +x deploy.sh
+    - ./deploy.sh && echo "Deploy is OK" || (echo "Deploy failed" && exit 1)
+  after_script:
+    - sh notify.sh "deploy"
